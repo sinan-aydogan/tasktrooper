@@ -1,4 +1,4 @@
-import { FolderKanban, Settings, Trash2 } from "lucide-react";
+import { FolderKanban, GripVertical, Settings, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Repository } from "@/api";
 import { RepositoryGitNotice } from "@/components/projects/RepositoryGitNotice";
@@ -6,7 +6,7 @@ import { ProjectIndexStatus } from "@/components/projects/ProjectIndexStatus";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/hooks/useI18n";
-import { formatRelativeDate } from "@/lib/utils";
+import { cn, formatRelativeDate } from "@/lib/utils";
 
 interface RepositoryRowProps {
   repository: Repository;
@@ -15,6 +15,10 @@ interface RepositoryRowProps {
   /** Omit to draw no bin icon — see `ProjectRepositoriesSection.onDeleteRepository`. */
   onDeleteRequest?: (repository: Repository) => void;
   onRestored: () => void;
+  draggable?: boolean;
+  isDragging?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: (e: React.DragEvent) => void;
 }
 
 /**
@@ -23,7 +27,16 @@ interface RepositoryRowProps {
  * instead of on their own page. Everything here is the same information the
  * standalone Repositories page showed; only the layout changed.
  */
-export function RepositoryRow({ repository, projectNameById, onDeleteRequest, onRestored }: RepositoryRowProps) {
+export function RepositoryRow({
+  repository,
+  projectNameById,
+  onDeleteRequest,
+  onRestored,
+  draggable = false,
+  isDragging = false,
+  onDragStart,
+  onDragEnd,
+}: RepositoryRowProps) {
   const { t } = useI18n();
   // Every project this repo is linked to, including the one whose section it
   // is drawn in — filtering that one out would need the caller to pass its
@@ -31,13 +44,30 @@ export function RepositoryRow({ repository, projectNameById, onDeleteRequest, on
   const linkedProjectIds = repository.project_ids ?? [];
 
   return (
-    <div className="px-4 py-3">
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={cn(
+        "px-4 py-3 transition-colors",
+        draggable && "cursor-grab active:cursor-grabbing hover:bg-muted/40",
+        isDragging && "opacity-50 ring-2 ring-primary/30 bg-primary/5",
+      )}
+    >
       <RepositoryGitNotice
         repository={repository}
         onRestored={onRestored}
         className="mb-3 rounded-lg px-3 py-2 text-xs shadow-none"
       />
       <div className="flex items-start gap-3">
+        {draggable && (
+          <div
+            className="mt-2.5 text-muted-foreground/40 hover:text-muted-foreground shrink-0"
+            title={t("projectAdmin.projects.dragToReassign")}
+          >
+            <GripVertical className="h-4 w-4" />
+          </div>
+        )}
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
           <FolderKanban className="h-4 w-4 text-muted-foreground" aria-hidden />
         </div>

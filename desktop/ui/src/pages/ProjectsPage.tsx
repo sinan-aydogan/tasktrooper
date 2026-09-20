@@ -1,4 +1,4 @@
-import { FolderKanban, Plus } from "lucide-react";
+import { FolderKanban, FolderMinus, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { api, type InitiativeProject, type Repository } from "@/api";
@@ -20,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCachedState, useFirstLoad } from "@/hooks/useCachedState";
 import { useI18n } from "@/hooks/useI18n";
 import { CACHE_PROJECTS, CACHE_REPOS } from "@/lib/project-board";
+import { cn } from "@/lib/utils";
 
 /**
  * Projects, and — since the standalone Repositories page is gone — the
@@ -41,6 +42,77 @@ export function ProjectsPage() {
   const [deletingProject, setDeletingProject] = useState(false);
   const [deleteRepoTarget, setDeleteRepoTarget] = useState<Repository | null>(null);
   const [deletingRepo, setDeletingRepo] = useState(false);
+
+  // Drag-and-drop state for assigning / reassigning repositories to projects
+  const [dragRepoId, setDragRepoId] = useState<string | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+
+  const handleRepoDragStart = (repoId: string) => {
+    setDragRepoId(repoId);
+  };
+
+  const handleRepoDragEnd = () => {
+    setDragRepoId(null);
+    setDropTargetId(null);
+  };
+
+  const handleDropOnProject = async (projectId: string) => {
+    if (!dragRepoId) return;
+    const repo = repositories.find((r) => r.id === dragRepoId);
+    const targetProject = projects.find((p) => p.id === projectId);
+    if (!repo || !targetProject) return;
+
+    const currentProjectIds = repo.project_ids ?? [];
+    if (currentProjectIds.includes(projectId)) {
+      setDragRepoId(null);
+      setDropTargetId(null);
+      return;
+    }
+
+    try {
+      await api.setRepositoryProjects(repo.id, [projectId]);
+      toast.success(
+        t("projectAdmin.projects.repoLinked", {
+          repo: repo.name,
+          project: targetProject.name,
+        }),
+      );
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("common.saveFailed"));
+    } finally {
+      setDragRepoId(null);
+      setDropTargetId(null);
+    }
+  };
+
+  const handleDropOnUnassigned = async () => {
+    if (!dragRepoId) return;
+    const repo = repositories.find((r) => r.id === dragRepoId);
+    if (!repo) return;
+
+    const currentProjectIds = repo.project_ids ?? [];
+    if (currentProjectIds.length === 0) {
+      setDragRepoId(null);
+      setDropTargetId(null);
+      return;
+    }
+
+    try {
+      await api.setRepositoryProjects(repo.id, []);
+      toast.success(
+        t("projectAdmin.projects.repoUnlinked", {
+          repo: repo.name,
+        }),
+      );
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("common.saveFailed"));
+    } finally {
+      setDragRepoId(null);
+      setDropTargetId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -175,30 +247,85 @@ export function ProjectsPage() {
                 onRestored={load}
                 onAddRepository={(method) => repoImport.start(project.id, method)}
                 addDisabled={repoImport.pendingSetup}
+                isDropTarget={dropTargetId === project.id}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dropTargetId !== project.id) setDropTargetId(project.id);
+                }}
+                onDragLeave={() => {
+                  if (dropTargetId === project.id) setDropTargetId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void handleDropOnProject(project.id);
+                }}
+                dragRepoId={dragRepoId}
+                onRepoDragStart={handleRepoDragStart}
+                onRepoDragEnd={handleRepoDragEnd}
               />
               <ProjectArchitectureSection project={project} repositories={repositories} projects={projects} />
             </div>
           ))}
 
-          {unassigned.length > 0 && (
-            <Card className="overflow-hidden p-0">
+          {(unassigned.length > 0 || (dragRepoId !== null && (repositories.find((r) => r.id === dragRepoId)?.project_ids?.length ?? 0) > 0)) && (
+            <Card
+              data-drop-zone="unassigned"
+              className={cn(
+                "overflow-hidden p-0 transition-all",
+                dropTargetId === "unassigned" && "border-primary bg-primary/5 ring-2 ring-primary/30",
+              )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                if (dropTargetId !== "unassigned") setDropTargetId("unassigned");
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                if (dropTargetId === "unassigned") setDropTargetId(null);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                void handleDropOnUnassigned();
+              }}
+            >
               <div className="border-b border-border px-4 py-3">
                 <h3 className="font-semibold text-muted-foreground">{t("projectAdmin.projects.unassignedTitle")}</h3>
                 <p className="mt-0.5 text-sm text-muted-foreground">
                   {t("projectAdmin.projects.unassignedDescription")}
                 </p>
               </div>
-              <div className="divide-y divide-border">
-                {unassigned.map((repo) => (
-                  <RepositoryRow
-                    key={repo.id}
-                    repository={repo}
-                    projectNameById={projectNameById}
-                    onDeleteRequest={setDeleteRepoTarget}
-                    onRestored={load}
-                  />
-                ))}
-              </div>
+              {unassigned.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                  {t("projectAdmin.projects.dropToUnlink")}
+                </p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {unassigned.map((repo) => (
+                    <RepositoryRow
+                      key={repo.id}
+                      repository={repo}
+                      projectNameById={projectNameById}
+                      onDeleteRequest={setDeleteRepoTarget}
+                      onRestored={load}
+                      draggable
+                      isDragging={dragRepoId === repo.id}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", repo.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        handleRepoDragStart(repo.id);
+                      }}
+                      onDragEnd={handleRepoDragEnd}
+                    />
+                  ))}
+                </div>
+              )}
+              {dropTargetId === "unassigned" && unassigned.length > 0 && (
+                <div className="flex items-center justify-center gap-2 border-t border-dashed border-primary/40 bg-primary/10 px-4 py-3 text-sm font-medium text-primary animate-in fade-in-50 duration-150">
+                  <FolderMinus className="h-4 w-4" />
+                  {t("projectAdmin.projects.dropToUnlink")}
+                </div>
+              )}
             </Card>
           )}
         </div>

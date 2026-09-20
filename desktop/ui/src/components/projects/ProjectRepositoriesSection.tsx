@@ -4,6 +4,7 @@ import { RepositoryRow } from "@/components/projects/RepositoryRow";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useI18n } from "@/hooks/useI18n";
+import { cn } from "@/lib/utils";
 
 export type RepositoryAddMethod = "open" | "import" | "create";
 
@@ -25,6 +26,15 @@ interface ProjectRepositoriesSectionProps {
   onAddRepository: (method: RepositoryAddMethod) => void;
   /** True while another repository's import wizard is mid-flow anywhere on the page. */
   addDisabled: boolean;
+  /** True when this project card is currently hovered with a dragged repository. */
+  isDropTarget?: boolean;
+  onDragOver?: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDrop?: (e: React.DragEvent) => void;
+  /** Drag-and-drop state for repos inside this section. */
+  dragRepoId?: string | null;
+  onRepoDragStart?: (repoId: string) => void;
+  onRepoDragEnd?: () => void;
 }
 
 /**
@@ -42,11 +52,30 @@ export function ProjectRepositoriesSection({
   onRestored,
   onAddRepository,
   addDisabled,
+  isDropTarget = false,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  dragRepoId = null,
+  onRepoDragStart,
+  onRepoDragEnd,
 }: ProjectRepositoriesSectionProps) {
   const { t } = useI18n();
 
   return (
-    <Card className="overflow-hidden p-0">
+    <Card
+      data-project-id={project.id}
+      className={cn(
+        "overflow-hidden p-0 transition-all",
+        isDropTarget && "border-primary bg-primary/5 ring-2 ring-primary/30",
+      )}
+      onDragOver={onDragOver}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        onDragLeave?.(e);
+      }}
+      onDrop={onDrop}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
         <div className="min-w-0">
           <h3 className="font-semibold">{project.name}</h3>
@@ -85,8 +114,23 @@ export function ProjectRepositoriesSection({
               projectNameById={projectNameById}
               {...(onDeleteRepository ? { onDeleteRequest: onDeleteRepository } : {})}
               onRestored={onRestored}
+              draggable={Boolean(onRepoDragStart)}
+              isDragging={dragRepoId === repo.id}
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", repo.id);
+                e.dataTransfer.effectAllowed = "move";
+                onRepoDragStart?.(repo.id);
+              }}
+              onDragEnd={onRepoDragEnd}
             />
           ))}
+        </div>
+      )}
+
+      {isDropTarget && (
+        <div className="flex items-center justify-center gap-2 border-t border-dashed border-primary/40 bg-primary/10 px-4 py-3 text-sm font-medium text-primary animate-in fade-in-50 duration-150">
+          <FolderPlus className="h-4 w-4" />
+          {t("projectAdmin.projects.dropToLink", { project: project.name })}
         </div>
       )}
 
