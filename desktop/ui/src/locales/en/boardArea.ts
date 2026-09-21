@@ -69,6 +69,7 @@ export const boardArea = {
     createDialogTitle: "Add Task to Backlog",
     filterAllProjects: "All projects",
     filterNoProject: "No project",
+    filterAllRepositories: "All repositories",
   },
   board: {
     repoFallback: "Repository",
@@ -93,6 +94,9 @@ export const boardArea = {
     newTask: "New Task",
     emptyColumn: "Empty",
     activityDialogTitle: "Activity: which agent is doing what",
+    filterAllProjects: "All projects",
+    filterNoProject: "No project",
+    filterAllRepositories: "All repositories",
   },
   components: {
     // The person half of a task's assignment. Shared by the create dialog and

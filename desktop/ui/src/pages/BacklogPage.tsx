@@ -67,6 +67,7 @@ export function BacklogPage() {
   const [defaultRepositoryId, setDefaultRepositoryId] = useState("");
   const [repositoryAutoOpen, setRepositoryAutoOpen] = useState<"create" | "open" | null>(null);
   const [projectFilter, setProjectFilter] = useState("all");
+  const [repoFilter, setRepoFilter] = useState("all");
 
   const openTaskCreate = () => {
     if (repositories.length === 0) {
@@ -145,17 +146,58 @@ export function BacklogPage() {
 
   usePolling(refreshTasks, TASK_POLL_MS, !loading);
 
+  const availableRepositories = useMemo(() => {
+    if (projectFilter === "all") return repositories;
+    if (projectFilter === "none") {
+      return repositories.filter((repo) => {
+        const hasNoProject = !repo.project_ids || repo.project_ids.length === 0;
+        const hasNoProjectTasks = tasks.some(
+          (t) => t.repository_id === repo.id && (!t.initiative_project_id || t.initiative_project_id === "none"),
+        );
+        return hasNoProject || hasNoProjectTasks;
+      });
+    }
+    return repositories.filter((repo) => {
+      const linked = Boolean(repo.project_ids?.includes(projectFilter));
+      const hasProjectTasks = tasks.some(
+        (t) => t.repository_id === repo.id && t.initiative_project_id === projectFilter,
+      );
+      return linked || hasProjectTasks;
+    });
+  }, [repositories, projectFilter, tasks]);
+
+  useEffect(() => {
+    if (repoFilter !== "all" && !availableRepositories.some((r) => r.id === repoFilter)) {
+      setRepoFilter("all");
+    }
+  }, [availableRepositories, repoFilter]);
+
   const backlogTasks = useMemo(
     () =>
       tasks
         .filter((task) => task.column === backlogSlug)
         .filter((task) => {
-          if (projectFilter === "all") return true;
-          if (projectFilter === "none") return !task.initiative_project_id;
-          return task.initiative_project_id === projectFilter;
+          if (repoFilter !== "all" && task.repository_id !== repoFilter) {
+            return false;
+          }
+          if (projectFilter !== "all") {
+            const repo = repositories.find((r) => r.id === task.repository_id);
+            if (projectFilter === "none") {
+              const hasTaskProject = Boolean(task.initiative_project_id && task.initiative_project_id !== "none");
+              const hasRepoProject = Boolean(repo?.project_ids && repo.project_ids.length > 0);
+              if (hasTaskProject || hasRepoProject) return false;
+            } else {
+              const matchesTask = task.initiative_project_id === projectFilter;
+              const matchesRepo =
+                (!task.initiative_project_id || task.initiative_project_id === "none") &&
+                Boolean(repo?.project_ids?.includes(projectFilter));
+              if (!matchesTask && !matchesRepo) return false;
+            }
+          }
+          return true;
         })
         .sort((a, b) => a.position - b.position),
-    [tasks, backlogSlug, projectFilter],
+    [tasks, backlogSlug, repoFilter, projectFilter, repositories],
   );
 
   // Looked up against every task, not just the backlog slice: changing the
@@ -258,7 +300,7 @@ export function BacklogPage() {
           title={t("boardArea.backlog.title")}
           description={t("boardArea.backlog.description")}
           action={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {initiativeProjects.length > 0 && (
                 <Select value={projectFilter} onValueChange={setProjectFilter}>
                   <SelectTrigger className="w-44">
@@ -270,6 +312,21 @@ export function BacklogPage() {
                     {initiativeProjects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {repositories.length > 0 && (
+                <Select value={repoFilter} onValueChange={setRepoFilter}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("boardArea.backlog.filterAllRepositories")}</SelectItem>
+                    {availableRepositories.map((repo) => (
+                      <SelectItem key={repo.id} value={repo.id}>
+                        {repo.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -507,7 +564,8 @@ export function BacklogPage() {
           columns={columns}
           agents={agents}
           memberAgentIds={memberIds}
-          defaultRepositoryId={defaultRepositoryId}
+          defaultRepositoryId={repoFilter !== "all" ? repoFilter : defaultRepositoryId}
+          defaultInitiativeProjectId={projectFilter !== "all" && projectFilter !== "none" ? projectFilter : undefined}
           defaultColumn={backlogSlug}
           title={t("boardArea.backlog.createDialogTitle")}
           onCreated={load}

@@ -58,6 +58,7 @@ interface CreateTaskDialogProps {
   agents: Agent[];
   memberAgentIds: string[];
   defaultRepositoryId?: string;
+  defaultInitiativeProjectId?: string;
   defaultColumn: TaskColumn;
   title?: string;
   onCreated: () => void;
@@ -80,6 +81,7 @@ export function CreateTaskDialog({
   agents,
   memberAgentIds,
   defaultRepositoryId,
+  defaultInitiativeProjectId,
   defaultColumn,
   title: dialogTitle,
   onCreated,
@@ -120,7 +122,7 @@ export function CreateTaskDialog({
     setPriority("medium");
     setDescription("");
     setTechnicalDescription("");
-    setInitiativeProjectId("none");
+    setInitiativeProjectId(defaultInitiativeProjectId ?? "none");
     setColumn(defaultColumn);
     setAssigneeId("none");
     setCriteria([]);
@@ -132,7 +134,7 @@ export function CreateTaskDialog({
     setRollbackPlan("");
     setDeployDependsOn([]);
     setRepoTasks([]);
-  }, [open, defaultRepositoryId, repositories, defaultColumn]);
+  }, [open, defaultRepositoryId, defaultInitiativeProjectId, repositories, defaultColumn]);
 
   // The dependency picker's options are the selected repository's tasks, loaded
   // only once the deploy section is actually opened: a board can hold hundreds

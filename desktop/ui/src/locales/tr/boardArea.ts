@@ -67,6 +67,7 @@ export const boardArea: BoardAreaDict = {
     createDialogTitle: "Backlog'a Görev Ekle",
     filterAllProjects: "Tüm projeler",
     filterNoProject: "Projesiz",
+    filterAllRepositories: "Tüm depolar",
   },
   board: {
     repoFallback: "Depo",
@@ -91,6 +92,9 @@ export const boardArea: BoardAreaDict = {
     newTask: "Yeni Görev",
     emptyColumn: "Boş",
     activityDialogTitle: "Aktivite: hangi ajan ne yapıyor",
+    filterAllProjects: "Tüm projeler",
+    filterNoProject: "Projesiz",
+    filterAllRepositories: "Tüm depolar",
   },
   components: {
     memberAssignee: {

@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCachedState, useFirstLoad } from "@/hooks/useCachedState";
 import { tStatic, useI18n } from "@/hooks/useI18n";
@@ -86,6 +87,8 @@ export function BoardPage() {
   const [loading, setLoading] = useFirstLoad(CACHE_TASKS, CACHE_CONFIG);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [defaultRepositoryId, setDefaultRepositoryId] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [repoFilter, setRepoFilter] = useState("all");
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const [dropColumn, setDropColumn] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<BoardTask | null>(null);
@@ -246,17 +249,66 @@ export function BoardPage() {
     [agents],
   );
 
+  const availableRepositories = useMemo(() => {
+    if (projectFilter === "all") return repositories;
+    if (projectFilter === "none") {
+      return repositories.filter((repo) => {
+        const hasNoProject = !repo.project_ids || repo.project_ids.length === 0;
+        const hasNoProjectTasks = tasks.some(
+          (t) => t.repository_id === repo.id && (!t.initiative_project_id || t.initiative_project_id === "none"),
+        );
+        return hasNoProject || hasNoProjectTasks;
+      });
+    }
+    return repositories.filter((repo) => {
+      const linked = Boolean(repo.project_ids?.includes(projectFilter));
+      const hasProjectTasks = tasks.some(
+        (t) => t.repository_id === repo.id && t.initiative_project_id === projectFilter,
+      );
+      return linked || hasProjectTasks;
+    });
+  }, [repositories, projectFilter, tasks]);
+
+  useEffect(() => {
+    if (repoFilter !== "all" && !availableRepositories.some((r) => r.id === repoFilter)) {
+      setRepoFilter("all");
+    }
+  }, [availableRepositories, repoFilter]);
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      if (repoFilter !== "all" && task.repository_id !== repoFilter) {
+        return false;
+      }
+      if (projectFilter !== "all") {
+        const repo = repositories.find((r) => r.id === task.repository_id);
+        if (projectFilter === "none") {
+          const hasTaskProject = Boolean(task.initiative_project_id && task.initiative_project_id !== "none");
+          const hasRepoProject = Boolean(repo?.project_ids && repo.project_ids.length > 0);
+          if (hasTaskProject || hasRepoProject) return false;
+        } else {
+          const matchesTask = task.initiative_project_id === projectFilter;
+          const matchesRepo =
+            (!task.initiative_project_id || task.initiative_project_id === "none") &&
+            Boolean(repo?.project_ids?.includes(projectFilter));
+          if (!matchesTask && !matchesRepo) return false;
+        }
+      }
+      return true;
+    });
+  }, [tasks, repoFilter, projectFilter, repositories]);
+
   const boardTasks = useMemo(() => {
     const grouped: Record<string, BoardTask[]> = {};
     for (const col of board) grouped[col.slug] = [];
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       if (grouped[task.column]) grouped[task.column].push(task);
     }
     for (const col of board) {
       grouped[col.slug].sort((a, b) => a.position - b.position);
     }
     return grouped;
-  }, [tasks, board]);
+  }, [filteredTasks, board]);
 
   // The card lands in its new column on the drop, not a round-trip later. The
   // request still decides: the server answers with the task as it actually
@@ -537,7 +589,38 @@ export function BoardPage() {
         <PageHeader
           title={t("boardArea.board.title")}
           action={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {initiativeProjects.length > 0 && (
+                <Select value={projectFilter} onValueChange={setProjectFilter}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("boardArea.board.filterAllProjects")}</SelectItem>
+                    <SelectItem value="none">{t("boardArea.board.filterNoProject")}</SelectItem>
+                    {initiativeProjects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {repositories.length > 0 && (
+                <Select value={repoFilter} onValueChange={setRepoFilter}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t("boardArea.board.filterAllRepositories")}</SelectItem>
+                    {availableRepositories.map((repo) => (
+                      <SelectItem key={repo.id} value={repo.id}>
+                        {repo.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Button variant="outline" className="gap-2" onClick={() => setActivityOpen(true)}>
                 <Activity className="h-4 w-4" />
                 {t("boardArea.board.activity")}
@@ -639,7 +722,8 @@ export function BoardPage() {
           columns={allColumns}
           agents={agents}
           memberAgentIds={memberIds}
-          defaultRepositoryId={defaultRepositoryId}
+          defaultRepositoryId={repoFilter !== "all" ? repoFilter : defaultRepositoryId}
+          defaultInitiativeProjectId={projectFilter !== "all" && projectFilter !== "none" ? projectFilter : undefined}
           defaultColumn="todo"
           onCreated={load}
         />
