@@ -22,8 +22,12 @@ import { originOf } from "./services/app-scheme.js";
  *    attached to one origin.
  */
 
-/** Height of the shell's title bar, in CSS pixels. The view is inset below it. */
-export const CHROME_HEIGHT = 44;
+/**
+ * Height of the shell's title bar, in CSS pixels. The view is inset below it
+ * on macOS where traffic lights sit inside the window (`hiddenInset`).
+ * On Windows/Linux, the window uses native framing so no client inset is needed.
+ */
+export const CHROME_HEIGHT = process.platform === "darwin" ? 44 : 0;
 
 /**
  * The route the window opens on.
@@ -97,6 +101,7 @@ export class Shell {
       minHeight: 600,
       show: false,
       title: "TaskTrooper",
+      autoHideMenuBar: true,
       // y:22 centers the traffic lights' own ~12px cluster on the header's
       // 56px (h-14) row — the same vertical center the brand mark and title
       // sit on via that row's own items-center — instead of leaving it to

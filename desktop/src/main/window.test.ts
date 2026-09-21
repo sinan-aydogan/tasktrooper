@@ -158,7 +158,7 @@ vi.mock("electron", () => ({
   },
 }));
 
-const { HOME_ROUTE, Shell, openExternally } = await import("./window.js");
+const { CHROME_HEIGHT, HOME_ROUTE, Shell, openExternally } = await import("./window.js");
 
 interface Harness {
   shell: InstanceType<typeof Shell>;
@@ -384,5 +384,24 @@ describe("openExternally", () => {
     expect(openExternally("not a url")).toBe(false);
     expect(openExternally("")).toBe(false);
     expect(openedExternally).toEqual([]);
+  });
+});
+
+describe("shell window options and layout", () => {
+  it("enables autoHideMenuBar to keep window chrome clean on Windows/Linux", () => {
+    const shell = new Shell({ origin: () => ORIGIN, onCloudStatus: () => {} });
+    const win = shell.create() as unknown as FakeBrowserWindow;
+    expect((win.options as { autoHideMenuBar?: boolean })?.autoHideMenuBar).toBe(true);
+  });
+
+  it("positions the view flush at the top on non-macOS platforms", () => {
+    const { view } = start();
+    expect(CHROME_HEIGHT).toBe(process.platform === "darwin" ? 44 : 0);
+    expect(view.bounds).toEqual({
+      x: 0,
+      y: CHROME_HEIGHT,
+      width: 1180,
+      height: 800 - CHROME_HEIGHT,
+    });
   });
 });

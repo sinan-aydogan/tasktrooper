@@ -52,7 +52,9 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
-      <nav className={`drag-region flex h-11 shrink-0 items-center gap-2 border-b border-border pr-3 ${IS_MAC ? "pl-20" : "pl-3"}`} />
+      {IS_MAC && (
+        <nav className="drag-region flex h-11 shrink-0 items-center gap-2 border-b border-border pr-3 pl-20" />
+      )}
 
       <div className="min-h-0 flex-1">
         {cloud?.state === "failed" ? <Unreachable status={cloud} info={info} onRetry={reload} /> : null}
